@@ -1,0 +1,10 @@
+path: /home/cristian/Escritorio/UNIVERSIDAD/TFMProyecto/data/Nutrition_Mini5
+train: images/train
+val: images/val
+
+names:
+  0: huevo
+  1: brocoli
+  2: arroz
+  3: pollo
+  4: pescado

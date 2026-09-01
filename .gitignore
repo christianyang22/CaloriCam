@@ -1,0 +1,63 @@
+# Variables de entorno
+.env
+.env.*
+!.env.example
+
+# Modelos y checkpoints
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# Pesos del backend
+Backend/pesos*/
+
+# Base de datos local
+*.db
+*.sqlite
+*.sqlite3
+
+# Datos generados por usuarios / feedback
+Backend/datos_reentrenamiento/
+
+# Datasets y pruebas locales
+data/
+pruebas/
+
+# Resultados de entrenamiento
+runs/
+**/runs/
+IA/1_Deteccion/runs_antes_optimizar/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Node / React / React Native
+node_modules/
+dist/
+build/
+.expo/
+.expo-shared/
+
+# Configuración local de agentes
+.agents/
+
+# Sistema / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Archivos temporales
+*.log
+*.tmp
+*.temp
+
+# Configuración de asistentes/agentes
+.agents/
+.claude/
+AGENTS.md
+CLAUDE.md
