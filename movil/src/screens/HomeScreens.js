@@ -227,7 +227,7 @@ export function CameraScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <CameraView style={StyleSheet.absoluteFillObject} facing="back" enableTorch={flash} ref={cameraRef} />
+      <CameraView style={StyleSheet.absoluteFillObject} facing="back" enableTorch={flash} ref={cameraRef} selectedLens='builtInWideAngleCamera' zoom={0.07} ratio="4:3"/>
       <SafeAreaView style={styles.overlay}>
         <View style={styles.topBar}>
           <TouchableOpacity style={styles.iconButton} onPress={() => setFlash(!flash)}>

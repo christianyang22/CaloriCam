@@ -3,7 +3,7 @@
   Permite la comunicación segura entre el cliente móvil y el servidor local.
   En un despliegue a producción, esta constante debe ser reemplazada por el dominio definitivo de la api.
 */
-export const API_BASE_URL = process.env.API_BASE_URL;
+export const API_BASE_URL = "https://quintet-barterer-oversight.ngrok-free.dev";
 
 /*
   Expresión regular empleada para la sanitización y validación en el lado del cliente.

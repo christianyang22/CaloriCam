@@ -103,6 +103,45 @@ transformacion_regresion = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
 
+# Prior volumétrico relativo para corregir el área 2D de las Bounding Boxes.
+# No es densidad física pura (g/cm³), sino un factor heurístico de ajuste.
+FACTORES_AREA_VOLUMEN = {
+    # Muy baja densidad (Mucho aire/volumen, poco peso)
+    "popcorn": 0.1, "lettuce": 0.1, "cilantro mint": 0.1, "salad": 0.15,
+    "bread": 0.3, "cabbage": 0.3, "bean sprouts": 0.3, "seaweed": 0.3,
+    
+    # Baja densidad (Esponjosos, huecos o ligeros)
+    "biscuit": 0.4, "cake": 0.4, "hanamaki baozi": 0.4, "spring onion": 0.4,
+    "rape": 0.4, "pepper": 0.4, "french fries": 0.5, "eggplant": 0.5,
+    "cauliflower": 0.5, "broccoli": 0.5, "snow peas": 0.5, "enoki mushroom": 0.5,
+    "oyster mushroom": 0.5, "white button mushroom": 0.5,
+    
+    # Densidad media-baja (Frutos secos, tallos, bayas)
+    "almond": 0.6, "cashew": 0.6, "dried cranberries": 0.6, "walnut": 0.6,
+    "peanut": 0.6, "strawberry": 0.6, "raspberry": 0.6, "asparagus": 0.6,
+    "celery stick": 0.6, "green beans": 0.6, "french beans": 0.6, "shiitake": 0.6,
+    "olives": 0.7, "king oyster mushroom": 0.7,
+    
+    # Densidad de referencia (Cercana al agua / 1.0)
+    "egg tart": 0.8, "red beans": 0.8, "soy": 0.8, "apple": 0.8, "apricot": 0.8,
+    "cherry": 0.8, "blueberry": 0.8, "grape": 0.8, "corn": 0.8, "hamburg": 0.8,
+    "pizza": 0.8, "pie": 0.8, "garlic": 0.8, "bamboo shoots": 0.8, "onion": 0.8,
+    "ice cream": 0.9, "date": 0.9, "banana": 0.9, "peach": 0.9, "lemon": 0.9,
+    "pear": 0.9, "fig": 0.9, "kiwi": 0.9, "melon": 0.9, "orange": 0.9,
+    "tomato": 0.9, "ginger": 0.9, "cucumber": 0.9, "white radish": 0.9,
+    "pumpkin": 0.9, "cheese butter": 1.0, "wine": 1.0, "milkshake": 1.0,
+    "coffee": 1.0, "juice": 1.0, "milk": 1.0, "tea": 1.0, "egg": 1.0,
+    "avocado": 1.0, "mango": 1.0, "pineapple": 1.0, "watermelon": 1.0,
+    "crab": 1.0, "shrimp": 1.0, "soup": 1.0, "wonton dumplings": 1.0,
+    "tofu": 1.0, "kelp": 1.0, "carrot": 1.0, "other ingredients": 1.0,
+    
+    # Alta densidad (Húmedos, compactos, pesados)
+    "pudding": 1.1, "shellfish": 1.1, "pasta": 1.1, "noodles": 1.1,
+    "rice": 1.1, "potato": 1.1, "sausage": 1.2, "fried meat": 1.2,
+    "sauce": 1.2, "fish": 1.2, "candy": 1.2, "chocolate": 1.3,
+    "pork": 1.4, "chicken duck": 1.4, "lamb": 1.4, "steak": 1.5,
+}
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -398,87 +437,119 @@ async def analizar_plato(
     usuario_actual: UsuarioDB = Depends(obtener_usuario_actual), 
     db: Session = Depends(get_db)
 ):
-    """
-    Pipeline principal de inferencia (Corregido). 
-    1. EfficientNet predice la masa total con la imagen completa.
-    2. YOLOv11 localiza los ingredientes.
-    3. Se reparte la masa total proporcionalmente al área de cada bounding box.
-    """
     contenido = await imagen.read()
     img_pil = Image.open(io.BytesIO(contenido)).convert("RGB")
     
     imagen_id = str(uuid.uuid4())
     img_pil.save(DIR_IMG / f"{imagen_id}.jpg")
     
-    # -----------------------------------------------------------------
     # 1. PREDICCIÓN DE MASA TOTAL (IMAGEN COMPLETA)
-    # -----------------------------------------------------------------
     tensor_plato = transformacion_regresion(img_pil).unsqueeze(0).to(modelos["regresion"].device)
     with torch.no_grad():
         masa_total_predicha = modelos["regresion"](tensor_plato).item()
     
-    # Evitamos pesos irreales por debajo de 10g para un plato
     masa_total_predicha = max(10.0, masa_total_predicha)
     
-    # -----------------------------------------------------------------
-    # 2. DETECCIÓN YOLO Y CÁLCULO DE ÁREAS
-    # -----------------------------------------------------------------
-    resultados_yolo = modelos["yolo"](img_pil, verbose=False, conf=0.35, iou=0.5, agnostic_nms=True)
+    # 2. DETECCIÓN YOLO Y FILTRADO ESPACIAL
+    # agnostic_nms=False para permitir detectar alimentos dentro de otros distintos
+    resultados_yolo = modelos["yolo"](img_pil, verbose=False, conf=0.45, iou=0.5, agnostic_nms=False)
     
-    cajas_detectadas = []
-    area_total_cajas = 0.0
-    
+    cajas_brutas = []
     for resultado in resultados_yolo:
         cajas = resultado.boxes
         for caja in cajas:
             x1, y1, x2, y2 = caja.xyxy[0].tolist()
             id_clase = int(caja.cls[0].item())
             nombre_clase = resultado.names[id_clase]
+            area = (x2 - x1) * (y2 - y1)
+            confianza = float(caja.conf[0].item())
             
-            # Cálculo del área de esta caja (ancho * alto)
-            area_caja = (x2 - x1) * (y2 - y1)
-            area_total_cajas += area_caja
-            
-            # Buscar alternativas por si el usuario quiere corregir
-            alternativas = [nombre_clase]
-            for otra_caja in cajas:
-                otra_id = int(otra_caja.cls[0].item())
-                otra_nombre = resultado.names[otra_id]
-                if otra_nombre not in alternativas:
-                    alternativas.append(otra_nombre)
-            
-            alternativas = alternativas[:4]
-            if "other" not in alternativas:
-                alternativas.append("other")
-                
-            cajas_detectadas.append({
-                "nombre": nombre_clase,
+            cajas_brutas.append({
                 "coords": [x1, y1, x2, y2],
-                "area": area_caja,
-                "alternativas": alternativas
+                "area": area,
+                "nombre": nombre_clase,
+                "confianza": confianza,
+                "caja_obj": caja,
+                "resultado": resultado
             })
 
-    # -----------------------------------------------------------------
+    cajas_detectadas = []
+    
+    # Lógica de filtrado
+    for i, caja_a in enumerate(cajas_brutas):
+        contenida = False
+        xa1, ya1, xa2, ya2 = caja_a["coords"]
+        
+        for j, caja_b in enumerate(cajas_brutas):
+            if i == j: continue
+            xb1, yb1, xb2, yb2 = caja_b["coords"]
+            
+            ix1, iy1 = max(xa1, xb1), max(ya1, yb1)
+            ix2, iy2 = min(xa2, xb2), min(ya2, yb2)
+            
+            if ix2 > ix1 and iy2 > iy1:
+                area_interseccion = (ix2 - ix1) * (iy2 - iy1)
+                solapamiento_a = area_interseccion / caja_a["area"]
+                iou = area_interseccion / (caja_a["area"] + caja_b["area"] - area_interseccion)
+                
+                if caja_a["nombre"] == caja_b["nombre"]:
+                    if solapamiento_a > 0.70 and caja_b["area"] > caja_a["area"]:
+                        contenida = True
+                        break
+                else:
+                    if iou > 0.85:
+                        if caja_b["confianza"] > caja_a["confianza"]:
+                            contenida = True
+                            break
+                    
+        if not contenida:
+            alternativas = [caja_a["nombre"]]
+            for otra_caja in cajas_brutas:
+                if otra_caja["nombre"] not in alternativas:
+                    alternativas.append(otra_caja["nombre"])
+                    
+            cajas_detectadas.append({
+                "nombre": caja_a["nombre"],
+                "coords": caja_a["coords"],
+                "area": caja_a["area"],
+                "alternativas": alternativas[:4] if "other" in alternativas else alternativas[:3] + ["other"]
+            })
+
     # 3. REPARTO PROPORCIONAL Y CÁLCULO NUTRICIONAL
-    # -----------------------------------------------------------------
+    
+    # Cálculo del peso teórico de las detecciones usando la nueva variable de factores
+    peso_teorico_detectado = 0.0
+    for det in cajas_detectadas:
+        factor = FACTORES_AREA_VOLUMEN.get(det["nombre"], 1.0)
+        det["peso_teorico"] = det["area"] * factor
+        peso_teorico_detectado += det["peso_teorico"]
+
+    # CONSTANTE GEOMÉTRICA
+    # Área total = 640.000 px. Un plato estándar 400.000 px.
+    AREA_PLATO_ESTIMADA_PX = 400000.0 
+    FACTOR_MEDIO = 1.0 # Factor base neutro
+    PESO_TEORICO_MINIMO_PLATO = AREA_PLATO_ESTIMADA_PX * FACTOR_MEDIO
+
+    # El denominador nunca puede ser menor al peso teórico de un plato vacío.
+    # Si YOLO detecta poco, se divide entre 400.000 (el sobrante será Masa No Identificada).
+    denominador_reparto = max(peso_teorico_detectado, PESO_TEORICO_MINIMO_PLATO)
+
     ingredientes_detectados = []
     agrupacion = {}
     
     calorias_totales = 0.0
-    gramos_totales = 0.0
+    gramos_asignados_totales = 0.0
     proteinas_totales = 0.0
     carbohidratos_totales = 0.0
     grasas_totales = 0.0
     
     for det in cajas_detectadas:
-        # Qué porcentaje del plato ocupa este ingrediente
-        proporcion = det["area"] / area_total_cajas if area_total_cajas > 0 else 0
+        # Proporción matemáticamente honesta
+        proporcion = det["peso_teorico"] / denominador_reparto if denominador_reparto > 0 else 0
         
-        # Asignamos los gramos proporcionales
         gramos_ingrediente = masa_total_predicha * proporcion
-        gramos_ingrediente = max(1.0, gramos_ingrediente) # Mínimo 1 gramo
+        gramos_ingrediente = max(1.0, gramos_ingrediente) # Clamp mínimo vital
         
-        # Calculamos macros basados en sus gramos reales
         datos_nutricionales = modelos["calculadora"].calcular_nutrientes(det["nombre"], gramos_ingrediente)
         
         cal = datos_nutricionales.get("calorias", 0)
@@ -487,7 +558,7 @@ async def analizar_plato(
         g_g = datos_nutricionales.get("macronutrientes", {}).get("grasas_g", 0)
         
         calorias_totales += cal
-        gramos_totales += gramos_ingrediente
+        gramos_asignados_totales += gramos_ingrediente
         proteinas_totales += p_g
         carbohidratos_totales += c_g
         grasas_totales += g_g
@@ -499,7 +570,6 @@ async def analizar_plato(
             "gramos_crudos": gramos_ingrediente
         })
         
-        # Agrupación para el frontend (ej. sumar todos los arroces detectados)
         if det["nombre"] not in agrupacion:
             agrupacion[det["nombre"]] = {
                 "ingrediente": det["nombre"],
@@ -515,6 +585,9 @@ async def analizar_plato(
         agrupacion[det["nombre"]]["macronutrientes"]["carbohidratos_g"] += c_g
         agrupacion[det["nombre"]]["macronutrientes"]["grasas_g"] += g_g
 
+    # Cálculo de masa residual
+    masa_no_identificada = max(0.0, masa_total_predicha - gramos_asignados_totales)
+
     lista_agrupada = []
     for clase, datos in agrupacion.items():
         datos["gramos_totales"] = round(datos["gramos_totales"], 2)
@@ -524,7 +597,6 @@ async def analizar_plato(
         datos["macronutrientes"]["grasas_g"] = round(datos["macronutrientes"]["grasas_g"], 2)
         lista_agrupada.append(datos)
 
-    # Registro en CSV para Data Flywheel
     try:
         with open(ARCHIVO_CORRECCIONES, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
@@ -544,7 +616,13 @@ async def analizar_plato(
             "ingredientes_totales": len(ingredientes_detectados),
             "clases_unicas": len(lista_agrupada),
             "calorias_totales_plato": round(calorias_totales, 2),
-            "gramos_totales_plato": round(gramos_totales, 2),
+            "gramos_totales_plato": round(gramos_asignados_totales, 2),
+            
+            # NUEVOS CAMPOS DE INCERTIDUMBRE (Backward-compatible con el frontend)
+            "masa_total_efficientnet_g": round(masa_total_predicha, 2),
+            "masa_no_identificada_g": round(masa_no_identificada, 2),
+            "ratio_cobertura": round(gramos_asignados_totales / masa_total_predicha, 2) if masa_total_predicha > 0 else 0,
+            
             "macronutrientes_totales": {
                 "proteinas_g": round(proteinas_totales, 2),
                 "carbohidratos_g": round(carbohidratos_totales, 2),
