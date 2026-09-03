@@ -1,101 +1,158 @@
 # CaloriCam
 
-**Trabajo de Fin de Máster (TFM)**
-**Máster de Inteligencia Artificial**
+> Sistema automatizado de estimación nutricional de alimentos basado en Inteligencia Artificial y Visión Computacional.
 
-**Autor:** Christian Jonathan Yang González
-
----
+[![Python Version](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=flat&logo=PyTorch&logoColor=white)](https://pytorch.org/)
+[![React Native](https://img.shields.io/badge/React_Native-20232A?style=flat&logo=react&logoColor=61DAFB)](https://reactnative.dev/)
 
 ## Descripción del Proyecto
 
-**CaloriCam** es un sistema integral basado en Inteligencia Artificial diseñado para estimar la cantidad de calorías y los valores nutricionales a partir de fotografías de alimentos. Este repositorio abarca todo el ciclo de vida del proyecto, desde el entrenamiento y desarrollo de los modelos de Deep Learning hasta el despliegue de las aplicaciones finales para usuarios (móvil y web) junto con su respectivo backend.
+**CaloriCam** es una plataforma integral diseñada para la detección de ingredientes y la estimación precisa de masa y valores nutricionales a partir de imágenes de comidas. Utilizando modelos de segmentación y detección avanzados (como YOLOv11 y arquitecturas basadas en EfficientNet), el sistema procesa la entrada visual para ofrecer resultados nutricionales estructurados tanto en entornos web como en dispositivos móviles.
 
-El objetivo principal de este trabajo es facilitar el seguimiento nutricional y la concienciación sobre la dieta utilizando visión por computador y regresión de datos nutricionales.
+## Estructura y Arquitectura
+
+El ecosistema del proyecto está dividido en los siguientes módulos principales:
+
+- `Backend/`: Microservicios construidos con FastAPI que manejan la lógica de negocio, integración de modelos IA y base de datos.
+- `IA/`: Pipelines de Machine Learning y Computer Vision (detección, segmentación y regresión) entrenados con datasets especializados (Nutrition5k, FoodSeg103).
+- `movil/`: Aplicación móvil multiplataforma desarrollada en React Native / Expo.
+- `web/`: Cliente frontend web moderno desarrollado con React y Vite.
 
 ---
 
-## Estructura del Repositorio
+## Requisitos Previos
 
-El proyecto se divide en 4 módulos principales:
+Asegúrate de tener instalados los siguientes componentes antes de iniciar el entorno de desarrollo:
 
-```text
-CaloriCam/
-├── Backend/                 # API y gestión de base de datos
-│   ├── database.py          # Conexión y operaciones con la base de datos
-│   └── main.py              # Archivo principal de la API (rutas y endpoints)
-│
-├── IA/                      # Modelos de Inteligencia Artificial y Datos
-│   ├── 0_Preprocesamiento/  # Scripts para limpieza y preparación de datasets (FoodSeg103, Nutrition5k)
-│   ├── 1_Deteccion/         # Modelos de Detección y Segmentación de alimentos
-│   ├── 2_Regresion/         # Modelos de regresión para el cálculo del peso/volumen y calorías
-│   └── 3_Calorias/          # Módulos de lógica para el cálculo calórico final
-│
-├── movil/                   # Aplicación móvil (React Native / Expo)
-│   ├── assets/              # Imágenes e iconos de la app
-│   ├── components/          # Componentes reutilizables de la interfaz
-│   ├── screens/             # Pantallas (Inicio, Historial, Perfil, Autenticación)
-│   └── App.js               # Punto de entrada de la aplicación móvil
-│
-└── web/                     # Aplicación web
-    ├── client/              # Frontend web (React, Vite, Tailwind CSS)
-    └── app_web_streamlit_antiguo.py # Versión inicial de la interfaz en Streamlit
+- **Python** (v3.9 o superior)
+- **Node.js** (v16 o superior) y npm/yarn
+- **Docker** (Opcional, para contenerización de servicios)
+- **ngrok** (Requerido para el desarrollo local de las apps cliente)
+
+---
+
+## Instalación y Despliegue Local
+
+### 1. Clonar el Repositorio
+
+```bash
+git clone [https://github.com/tu-organizacion/CaloriCam.git](https://github.com/tu-organizacion/CaloriCam.git)
+cd CaloriCam
+
+```
+
+### 2. Instalación de Dependencias Core (Backend e IA)
+
+Es recomendable utilizar un entorno virtual (`venv` o `conda`) para aislar las dependencias de Python.
+
+```bash
+# Crear y activar entorno virtual (opcional pero recomendado)
+python -m venv venv
+source venv/bin/activate  # En Windows: venv\Scripts\activate
+
+# Instalar dependencias requeridas
+pip install -r requirements.txt
+
+```
+
+### 3. Configuración de túneles locales con ngrok
+
+Para que la aplicación móvil (`movil/`) y la plataforma web (`web/`) puedan comunicarse correctamente con el servidor backend que corre en tu máquina de desarrollo, es necesario exponer el puerto local a internet de forma segura utilizando **ngrok**.
+
+1. **Crear una cuenta:** Regístrate gratuitamente en [ngrok.com](https://ngrok.com/).
+2. **Instalación:** Descarga ngrok e instálalo en tu sistema.
+3. **Autenticación:** En tu terminal, asocia ngrok a tu cuenta utilizando tu token (disponible en el dashboard de ngrok):
+```bash
+ngrok config add-authtoken <TU_AUTH_TOKEN_AQUI>
+
+```
+
+
+4. **Exponer el puerto:** Inicia un túnel HTTP hacia el puerto donde corre tu backend (generalmente el `8000` para FastAPI):
+```bash
+ngrok http 8000
+
+```
+
+
+5. **Copia la URL pública** que te genera la terminal (ej: `https://abcd-12-34-56-78.ngrok-free.app`). Usarás esta URL en el siguiente paso.
+
+### 4. Configuración de Variables de Entorno
+
+Debes crear los archivos `.env` basándote en las plantillas `.example` proporcionadas en los distintos módulos del proyecto.
+
+**En el Backend:**
+
+```bash
+cp Backend/.env.example Backend/.env
+# Edita Backend/.env e ingresa tu SECRET_KEY y credenciales de base de datos.
+
+```
+
+**En la Aplicación Móvil:**
+
+```bash
+cp movil/.env.example movil/.env
+# Edita movil/.env y reemplaza EXPO_PUBLIC_API_URL por la URL generada por ngrok.
+
 ```
 
 ---
 
-## Módulos en Detalle
+## Ejecución de los Servicios
 
-### 1. IA (Inteligencia Artificial)
-Es el núcleo predictivo del proyecto. Se compone de varias etapas de procesamiento:
-*   **Preprocesamiento (`0_Preprocesamiento`):** Contiene los scripts necesarios para descargar, limpiar, formatear mascaras, extraer parquets y sincronizar los conjuntos de datos principales utilizados: **FoodSeg103** y **Nutrition5k**.
-*   **Detección y Segmentación (`1_Deteccion`):** Utiliza modelos de visión por computador para localizar los alimentos en la bandeja o plato y segmentar sus bordes.
-*   **Regresión (`2_Regresion`):** Entrena modelos para predecir variables continuas (como el volumen, masa o estimaciones calóricas directas) basándose en las características extraídas de las imágenes.
-*   **Cálculo de Calorías (`3_Calorias`):** Integra los resultados de las etapas anteriores mediante scripts (`calculadora.py`) para devolver la estimación nutricional final.
+Una vez configurado, puedes levantar los entornos de manera independiente:
 
-### 2. Backend
-Proporciona la lógica de negocio y la comunicación entre los clientes (web/móvil) y los modelos de IA.
-*   Construido en Python (probablemente FastAPI/Flask).
-*   Se encarga de recibir las imágenes, procesarlas usando los modelos del módulo `IA`, y guardar el historial del usuario en la base de datos (`database.py`).
+**1. Levantar el Backend:**
 
-### 3. Aplicación Móvil (`movil`)
-Desarrollada con **React Native / Expo** y estilizada con **NativeWind / Tailwind**, permite a los usuarios:
-*   Registrarse e iniciar sesión (`AuthScreens`).
-*   Capturar o subir fotos de sus comidas (`HomeScreens`).
-*   Visualizar los resultados de las calorías y llevar un registro continuo (`HistorialScreen`).
-*   Gestionar sus datos personales (`ProfileScreens`).
+```bash
+cd Backend
+uvicorn main:app --reload
 
-### 4. Aplicación Web (`web`)
-Ofrece una interfaz alternativa para interactuar con el sistema a través del navegador.
-*   **Client (Frontend actual):** Aplicación moderna en React y Vite. Permite subir imágenes (`ImageUploader.jsx`) o capturarlas mediante webcam (`WebcamCapture.jsx`).
-*   **Streamlit (Legacy):** Un script antiguo de Streamlit utilizado en las primeras fases del desarrollo para probar los modelos rápidamente.
+```
 
----
+**2. Iniciar el Cliente Web:**
 
-## Tecnologías Utilizadas
+```bash
+cd web/client
+npm install
+npm run dev
 
-*   **Inteligencia Artificial:** Python, PyTorch, YOLO/Modelos de segmentación, Pandas, OpenCV.
-*   **Backend:** Python, API REST, Base de datos relacional/NoSQL.
-*   **Frontend Móvil:** React Native, Expo, Tailwind CSS (NativeWind).
-*   **Frontend Web:** React, Vite, Tailwind CSS, Streamlit.
+```
+
+**3. Iniciar la App Móvil:**
+
+```bash
+cd movil
+npm install
+npx expo start
+
+```
 
 ---
 
-## Instrucciones de Instalación y Uso (General)
+## Modelos de Inteligencia Artificial
 
-Debido a la arquitectura modular, cada sección requiere sus propios pasos de instalación:
+Los scripts de entrenamiento y preprocesamiento de imágenes se encuentran dentro del directorio `IA/`. Para correr reentrenamientos o validaciones (ej. tests de humo), puedes navegar a sus subdirectorios respectivos:
 
-1.  **Backend e IA:** 
-    *   Crear un entorno virtual de Python.
-    *   Instalar las dependencias (ej. `pip install -r requirements.txt`).
-    *   Ejecutar el servidor API (ej. `python main.py` o vía `uvicorn`).
-2.  **Aplicación Móvil:**
-    *   Navegar al directorio `movil`.
-    *   Instalar dependencias con `npm install` o `yarn install`.
-    *   Ejecutar con `npx expo start`.
-3.  **Aplicación Web:**
-    *   Navegar al directorio `web/client`.
-    *   Instalar dependencias con `npm install`.
-    *   Ejecutar con `npm run dev`.
+* **Preprocesamiento:** Extracción de parquets y sincronización de imágenes (`IA/0_Preprocesamiento/`).
+* **Detección y Segmentación:** Pipelines para identificar la posición y los píxeles de cada alimento (`IA/1_Deteccion/`).
+* **Regresión:** Estimación del volumen/peso y calorías a partir de las detecciones (`IA/2_Regresion/`).
 
-*(Nota: Asegúrate de configurar las variables de entorno necesarias en cada módulo para las conexiones a la base de datos y la comunicación con el Backend).*
+---
+
+## Licencia
+
+Este proyecto ha sido desarrollado como Trabajo Fin de Máster (TFM). La autoría de este trabajo es fruto exclusivamente del esfuerzo intelectual individual, garantizando que todas las fuentes y materiales de terceros están correctamente referenciados en el texto y bibliografía.
+
+Al autorizar su inclusión en el Repositorio de Trabajos Fin de Estudios TITULA de la Universidad Europea de Madrid, este proyecto se rige bajo una licencia **Creative Commons Reconocimiento - No Comercial - Sin Obra Derivada**. De acuerdo a esta licencia:
+
+* Los usuarios tienen la obligación de citar y reconocer los créditos del trabajo.
+
+* El proyecto no se podrá utilizar para fines comerciales.
+
+* No se podrá alterar, transformar o generar una obra derivada a partir del mismo.
+
+El autor preserva de forma íntegra los derechos de explotación y uso sobre el proyecto, pudiendo publicarlo posteriormente en otras editoriales, revistas o soportes. Asimismo, se concede permiso a la Universidad Europea de Madrid para exhibir y difundir este trabajo en sus canales institucionales y soportes con fines de promoción profesional de sus exalumnos, siempre que se cite su autoría.
