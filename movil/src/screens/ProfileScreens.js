@@ -5,7 +5,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker'; 
 import { UserContext } from '../context/UserContext';
 import { CustomAlert } from '../components/CustomAlert';
-import { API_BASE_URL, regexSoloLetras } from '../config/constants';
+import { API_BASE_URL } from '../config/constants';
+import { calculateCalorieGoal } from '../utils/nutrition';
+import { isStrongPassword, isValidEmail, isValidName, validatePassword } from '../utils/validation';
 
 export function ProfileMainScreen({ navigation }) {
   const { user, setUser } = useContext(UserContext); 
@@ -135,7 +137,6 @@ export function PerfilAjustesScreen({ navigation }) {
   const [alert, setAlert] = useState({ visible: false, title: "", message: "" });
 
   const handleGuardarCambios = async () => {
-    let tmb = 0;
     const p = parseFloat(peso);
     const a_cm = parseInt(altura);
     const e = parseInt(edad);
@@ -143,10 +144,10 @@ export function PerfilAjustesScreen({ navigation }) {
 
     const nombreCompleto = `${nombre.trim()} ${apellidos.trim()}`;
 
-    if (!nombre.trim() || !regexSoloLetras.test(nombre.trim())) {
+    if (!isValidName(nombre)) {
       return setAlert({visible: true, title: "Aviso", message: "El nombre no puede estar vacío y solo puede contener letras."});
     }
-    if (apellidos.trim() && !regexSoloLetras.test(apellidos.trim())) {
+    if (!isValidName(apellidos, false)) {
       return setAlert({visible: true, title: "Aviso", message: "Los apellidos solo pueden contener letras."});
     }
 
@@ -165,15 +166,7 @@ export function PerfilAjustesScreen({ navigation }) {
         return setAlert({ visible: true, title: "Aviso", message: "Introduce un valor válido de calorías para tu meta." });
       }
     } else {
-      if (genero === "Hombre") {
-        tmb = 88.362 + (13.397 * p) + (4.799 * a_cm) - (5.677 * e);
-      } else {
-        tmb = 447.593 + (9.247 * p) + (3.098 * a_cm) - (4.330 * e);
-      }
-      metaCalorias = tmb * 1.2;
-      if (objetivo === "perder") metaCalorias -= 500;
-      if (objetivo === "ganar") metaCalorias += 500;
-      metaCalorias = Math.round(metaCalorias);
+      metaCalorias = calculateCalorieGoal({ gender: genero, weight: p, height: a_cm, age: e, objective: objetivo });
     }
 
     try {
@@ -185,7 +178,7 @@ export function PerfilAjustesScreen({ navigation }) {
       if (res.status === 401) { setUser(null); return; }
       if (res.ok) {
         setUser({ ...user, nombre: nombreCompleto, peso_kg: p, altura_cm: a_cm, edad: e, genero: genero, objetivo: objetivo, meta_calorias: metaCalorias });
-        setAlert({ visible: true, title: "¡Éxito!", message: "Ajustes de perfil guardados." });
+        setAlert({ visible: true, title: "¡Éxito!", message: "Ajustes de perfil guardados.", variant: "success" });
       }
     } catch (err) {
       setAlert({ visible: true, title: "Sin red", message: "Error de conexión." });
@@ -316,16 +309,12 @@ export function PrivacidadSeguridadScreen({ navigation }) {
     Se aplican expresiones regulares para garantizar una complejidad mínima de la 
     nueva contraseña. Esto optimiza el flujo de red al evitar peticiones no válidas.
   */
-  const isLengthValid = newPassword.length >= 8;
-  const hasUpperLower = /[A-Z]/.test(newPassword) && /[a-z]/.test(newPassword);
-  const hasNumber = /\d/.test(newPassword);
-  const hasSpecialChar = /[^A-Za-z0-9]/.test(newPassword); 
-  
-  const isPasswordStrong = isLengthValid && hasUpperLower && hasNumber && hasSpecialChar;
+  const { isLengthValid, hasUpperLower, hasNumber, hasSpecialChar } = validatePassword(newPassword);
+  const isPasswordStrong = isStrongPassword(newPassword);
   const passwordsMatch = confirmNewPassword.length > 0 && newPassword === confirmNewPassword;
   
   const isFormValidPass = oldPassword.length > 0 && isPasswordStrong && passwordsMatch;
-  const isFormValidEmail = emailNuevo.includes("@") && passwordParaEmail.length > 0;
+  const isFormValidEmail = isValidEmail(emailNuevo) && passwordParaEmail.length > 0;
 
   const handleChangeEmail = async () => {
     if (!isFormValidEmail) return;
@@ -339,7 +328,7 @@ export function PrivacidadSeguridadScreen({ navigation }) {
       const data = await res.json();
       if (res.ok) {
         setUser({ ...user, email: data.email, token: data.token });
-        setAlert({ visible: true, title: "¡Éxito!", message: "Correo actualizado correctamente." });
+        setAlert({ visible: true, title: "¡Éxito!", message: "Correo actualizado correctamente.", variant: "success" });
         setEmailNuevo(""); setPasswordParaEmail("");
       } else {
         setAlert({ visible: true, title: "Error", message: data.detail });
@@ -360,7 +349,7 @@ export function PrivacidadSeguridadScreen({ navigation }) {
       if (res.status === 401) { setUser(null); return; }
       const data = await res.json();
       if (res.ok) {
-        setAlert({ visible: true, title: "¡Éxito!", message: "Contraseña actualizada." });
+        setAlert({ visible: true, title: "¡Éxito!", message: "Contraseña actualizada.", variant: "success" });
         setOldPassword(""); setNewPassword(""); setConfirmNewPassword("");
       } else {
         setAlert({ visible: true, title: "Error", message: data.detail });
@@ -540,7 +529,7 @@ export function TerminosScreen({ navigation }) {
 
           <Text className="text-white font-bold text-lg mb-2">4. Derecho al Olvido</Text>
           <Text className="text-neutral-400 mb-4 leading-6">
-            Eres dueño de tus datos. En el apartado de "Privacidad y Seguridad" puedes eliminar tu cuenta permanentemente en cualquier momento, lo que purgará tus credenciales y tu historial de nuestros sistemas.
+            Eres dueño de tus datos. En el apartado de &quot;Privacidad y Seguridad&quot; puedes eliminar tu cuenta permanentemente en cualquier momento, lo que purgará tus credenciales y tu historial de nuestros sistemas.
           </Text>
         </View>
       </ScrollView>

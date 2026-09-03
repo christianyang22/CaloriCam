@@ -4,7 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { UserContext } from '../context/UserContext';
 import { CustomAlert } from '../components/CustomAlert';
-import { API_BASE_URL, regexSoloLetras } from '../config/constants';
+import { API_BASE_URL } from '../config/constants';
+import { calculateCalorieGoal } from '../utils/nutrition';
+import { isStrongPassword, isValidEmail, isValidName, validatePassword } from '../utils/validation';
 
 export function LoginScreen({ navigation }) {
   const { setUser } = useContext(UserContext);
@@ -14,7 +16,7 @@ export function LoginScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [alert, setAlert] = useState({ visible: false, title: "", message: "", onConfirm: null });
 
-  const isFormValid = email.includes("@") && password.length > 0;
+  const isFormValid = isValidEmail(email) && password.length > 0;
 
   const handleLogin = async () => {
     setLoading(true);
@@ -110,16 +112,13 @@ export function RegisterScreen({ navigation }) {
     uso de mayúsculas, minúsculas, números y caracteres especiales.
     esto previene el envío de peticiones inseguras o inválidas al backend.
   */
-  const isLengthValid = password.length >= 8;
-  const hasUpperLower = /[A-Z]/.test(password) && /[a-z]/.test(password);
-  const hasNumber = /\d/.test(password);
-  const hasSpecialChar = /[^A-Za-z0-9]/.test(password); 
-  const isPasswordStrong = isLengthValid && hasUpperLower && hasNumber && hasSpecialChar;
+  const { isLengthValid, hasUpperLower, hasNumber, hasSpecialChar } = validatePassword(password);
+  const isPasswordStrong = isStrongPassword(password);
   const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword;
   
-  const isNombreValid = nombre.trim() !== "" && regexSoloLetras.test(nombre);
-  const isApellidosValid = apellidos.trim() !== "" && regexSoloLetras.test(apellidos);
-  const isFormValid = isNombreValid && isApellidosValid && email.includes("@") && isPasswordStrong && passwordsMatch && terminos;
+  const isNombreValid = isValidName(nombre);
+  const isApellidosValid = isValidName(apellidos);
+  const isFormValid = isNombreValid && isApellidosValid && isValidEmail(email) && isPasswordStrong && passwordsMatch && terminos;
 
   const handleRegister = async () => {
     setLoading(true);
@@ -146,6 +145,7 @@ export function RegisterScreen({ navigation }) {
           visible: true, 
           title: "¡Éxito!", 
           message: "Tu cuenta ha sido creada correctamente.",
+          variant: "success",
           onConfirm: () => setUser({ id: data.usuario_id, nombre: nombreCompleto, email: email.trim(), token: data.token, avatar_id: null, onboarding_completado: false }) 
         });
       } else {
@@ -273,7 +273,6 @@ export function OnboardingScreen() {
 
   const calcularYGuardarPerfil = async () => {
     setLoading(true);
-    let tmb = 0;
     const p = parseFloat(peso);
     const a = parseInt(altura);
     const e = parseInt(edad);
@@ -283,23 +282,7 @@ export function OnboardingScreen() {
       Es el modelo matemático estándar para estimar el gasto energético en reposo
       utilizando parámetros biométricos básicos (peso, altura, edad y género biológico).
     */
-    if (genero === "Hombre") {
-      tmb = 88.362 + (13.397 * p) + (4.799 * a) - (5.677 * e);
-    } else {
-      tmb = 447.593 + (9.247 * p) + (3.098 * a) - (4.330 * e);
-    }
-
-    /*
-      Ajuste de la meta calórica.
-      Se aplica un factor de actividad física genérico (correspondiente
-      a un estilo de vida sedentario o de actividad ligera). Posteriormente,
-      se suma o resta un margen de 500 kcal según el objetivo de peso del usuario
-      para asegurar un superávit o déficit calórico progresivo y seguro.
-    */
-    let metaCalorias = tmb * 1.2;
-    if (objetivo === "perder") metaCalorias -= 500;
-    if (objetivo === "ganar") metaCalorias += 500;
-    metaCalorias = Math.round(metaCalorias);
+    const metaCalorias = calculateCalorieGoal({ gender: genero, weight: p, height: a, age: e, objective: objetivo });
 
     try {
       const res = await fetch(`${API_BASE_URL}/actualizar_perfil`, {

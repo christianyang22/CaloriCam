@@ -16,19 +16,12 @@ export const CustomAlert = ({
   onConfirm, 
   confirmText = "Entendido", 
   showCancel = false, 
-  isDestructive = false 
+  isDestructive = false,
+  variant = "info"
 }) => {
   if (!visible) return null;
 
-  /*
-    Análisis del título de la alerta.
-    Se evalúa la presencia de palabras clave específicas para inferir automáticamente 
-    si se trata de un mensaje de éxito. Esto reduce la fricción en el desarrollo, 
-    evitando la necesidad de pasar una propiedad adicional en cada invocación.
-  */
-  const isSuccess = title.toLowerCase().includes("éxito") || 
-                    title.toLowerCase().includes("bienvenido") || 
-                    title.toLowerCase().includes("actualizada");
+  const isSuccess = variant === "success";
 
   /*
     Asignación dinámica de clases de estilo y paleta de colores.

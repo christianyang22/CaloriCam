@@ -1,9 +1,10 @@
 import React, { useRef, useState, useEffect, useContext } from 'react';
-import { View, Text, TouchableOpacity, Image, ActivityIndicator, ScrollView, Modal, Animated, PanResponder, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, Image, ActivityIndicator, FlatList, ScrollView, Modal, Animated, PanResponder, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context'; 
 import { Ionicons } from '@expo/vector-icons';
 import { UserContext } from '../context/UserContext';
 import { API_BASE_URL } from '../config/constants';
+import { calculateNutritionTotals, parseIngredients } from '../utils/nutrition';
 
 /*
   Componente que permite deslizar un elemento del historial hacia la izquierda para eliminarlo.
@@ -203,18 +204,22 @@ export function HistorialScreen({ navigation }) {
           <Text className="text-neutral-600 text-xs mt-2 text-center">¡Ve a Inicio y escanea tu primera comida!</Text>
         </View>
       ) : (
-        <ScrollView scrollEnabled={scrollEnabled} showsVerticalScrollIndicator={false} className="flex-1">
-          {historial.map((plato, i) => (
+        <FlatList
+          data={historial}
+          keyExtractor={(plato, index) => String(plato.id || index)}
+          scrollEnabled={scrollEnabled}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 24 }}
+          renderItem={({ item: plato }) => (
              <SwipeableHistorialItem 
-                key={plato.id || i} 
                 plato={plato} 
                 onSelect={(p) => setPlatoSeleccionado(p)} 
                 onInstantDelete={eliminarPlatoConfirmado} 
                 onSwipeStart={() => setScrollEnabled(false)}
                 onSwipeEnd={() => setScrollEnabled(true)}
              />
-          ))}
-        </ScrollView>
+          )}
+        />
       )}
 
       {/* Vista modal superpuesta con los detalles completos del escaneo */}
@@ -260,8 +265,10 @@ export function HistorialScreen({ navigation }) {
 
                 <Text className="text-neutral-400 font-bold mb-4 uppercase tracking-wider">Alimentos detectados</Text>
                 
-                {JSON.parse(platoSeleccionado.ingredientes_json || "[]").map((ing, idx) => {
-                  const gramosTotales = JSON.parse(platoSeleccionado.ingredientes_json || "[]").reduce((acc, curr) => acc + curr.gramos_totales, 0);
+                {(() => {
+                  const ingredientes = parseIngredients(platoSeleccionado.ingredientes_json);
+                  const gramosTotales = calculateNutritionTotals(ingredientes).grams;
+                  return ingredientes.map((ing, idx) => {
                   const percentage = gramosTotales > 0 ? ((ing.gramos_totales / gramosTotales) * 100).toFixed(1) : 0;
 
                   return (
@@ -281,7 +288,8 @@ export function HistorialScreen({ navigation }) {
                       </View>
                     </View>
                   );
-                })}
+                  });
+                })()}
                 
                 <TouchableOpacity className="mt-6 bg-red-500/10 border border-red-500/50 p-4 rounded-xl flex-row justify-center items-center" onPress={() => confirmarBorradoModal(platoSeleccionado)}>
                   <Ionicons name="trash" size={20} color="#ef4444" />

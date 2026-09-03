@@ -6,6 +6,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { UserContext } from '../context/UserContext';
 import { API_BASE_URL } from '../config/constants';
+import { calculateNutritionTotals } from '../utils/nutrition';
 
 export function HomeScreen({ navigation }) {
   const { user, setUser } = useContext(UserContext); 
@@ -120,7 +121,7 @@ export function HomeScreen({ navigation }) {
               </View>
               
               <View className="relative h-32 flex-row justify-between items-end">
-                <View className="absolute w-full border-t border-dashed border-neutral-500 z-0" style={{ bottom: '75%' }} />
+                  <View className="absolute w-full border-t border-dashed border-neutral-500 z-0" style={{ bottom: '75%' }} />
 
                 {semana.map((dia, idx) => {
                   const isOver = dia.calorias > meta;
@@ -351,34 +352,27 @@ export function ResultsScreen({ route, navigation }) {
 
   const handleGuardarPlato = async () => {
     try {
-      let calcTotalKcal = 0; let calcTotalGramos = 0; let calcTotalProteinas = 0; let calcTotalCarbohidratos = 0; let calcTotalGrasas = 0;
-      if (iaResult && iaResult.agrupados) {
-        iaResult.agrupados.forEach(item => {
-          calcTotalKcal += item.calorias_totales;
-          calcTotalProteinas += item.macronutrientes.proteinas_g;
-          calcTotalCarbohidratos += item.macronutrientes.carbohidratos_g;
-          calcTotalGrasas += item.macronutrientes.grasas_g;
-        });
-      }
+      const totals = calculateNutritionTotals(iaResult?.agrupados);
 
       // Forzamos la zona horaria local en la fecha para evitar desfases de horas al guardar en la base de datos.
       const now = new Date();
       const pad = (n) => String(n).padStart(2, '0');
       const fechaLocalStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
-      await fetch(`${API_BASE_URL}/guardar_plato`, {
+      const response = await fetch(`${API_BASE_URL}/guardar_plato`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${user.token}`, 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
         body: JSON.stringify({
           imagen_id: iaResult.imagen_id,
-          calorias_totales: parseFloat(Number(calcTotalKcal).toFixed(2)),
-          proteinas_g: parseFloat(Number(calcTotalProteinas).toFixed(2)),
-          carbohidratos_g: parseFloat(Number(calcTotalCarbohidratos).toFixed(2)),
-          grasas_g: parseFloat(Number(calcTotalGrasas).toFixed(2)),
+          calorias_totales: parseFloat(Number(totals.calories).toFixed(2)),
+          proteinas_g: parseFloat(Number(totals.protein).toFixed(2)),
+          carbohidratos_g: parseFloat(Number(totals.carbohydrates).toFixed(2)),
+          grasas_g: parseFloat(Number(totals.fat).toFixed(2)),
           ingredientes_json: JSON.stringify(iaResult.agrupados),
           fecha_local: fechaLocalStr
         })
       });
+      if (!response.ok) throw new Error('No se pudo guardar el plato');
       navigation.popToTop(); 
     } catch (e) {
       console.error("Error al guardar plato:", e);
@@ -401,7 +395,14 @@ export function ResultsScreen({ route, navigation }) {
     const newName = finalName || searchQuery || oldName;
     const ratio = newGrams / oldGrams;
     
-    const updated = { ...iaResult };
+    const updated = {
+      ...iaResult,
+      agrupados: iaResult.agrupados.map((currentItem, currentIndex) => (
+        currentIndex === index
+          ? { ...currentItem, macronutrientes: { ...currentItem.macronutrientes } }
+          : currentItem
+      )),
+    };
     const updatedItem = updated.agrupados[index];
     
     updatedItem.ingrediente = newName;
@@ -436,13 +437,7 @@ export function ResultsScreen({ route, navigation }) {
     ? [] 
     : clasesDisponibles.filter(c => c.toLowerCase().includes(searchQuery.toLowerCase()) && c.toLowerCase() !== searchQuery.toLowerCase()).slice(0, 5);
 
-  let calcTotalKcal = 0; let calcTotalGramos = 0; let calcTotalProteinas = 0; let calcTotalCarbohidratos = 0; let calcTotalGrasas = 0;
-  if (iaResult && iaResult.agrupados) {
-    iaResult.agrupados.forEach(item => {
-      calcTotalKcal += item.calorias_totales; calcTotalGramos += item.gramos_totales;
-      calcTotalProteinas += item.macronutrientes.proteinas_g; calcTotalCarbohidratos += item.macronutrientes.carbohidratos_g; calcTotalGrasas += item.macronutrientes.grasas_g;
-    });
-  }
+  const totals = calculateNutritionTotals(iaResult?.agrupados);
 
   return (
     <SafeAreaView className="flex-1 bg-neutral-900 pt-10">
@@ -471,20 +466,20 @@ export function ResultsScreen({ route, navigation }) {
                 <View className="flex-row justify-between items-center mb-4">
                   <Text className="text-white text-xl font-bold">Total del plato</Text>
                   <View className="bg-emerald-500/20 px-4 py-2 rounded-lg">
-                    <Text className="text-emerald-400 font-bold text-lg">{parseFloat(Number(calcTotalKcal).toFixed(2))} kcal</Text>
+                    <Text className="text-emerald-400 font-bold text-lg">{parseFloat(Number(totals.calories).toFixed(2))} kcal</Text>
                   </View>
                 </View>
                 <View className="flex-row justify-between pt-3 border-t border-neutral-700/50">
-                  <Text className="text-blue-400 text-xs font-bold">Proteína: {parseFloat(Number(calcTotalProteinas).toFixed(2))}g</Text>
-                  <Text className="text-yellow-400 text-xs font-bold">Carbohidratos: {parseFloat(Number(calcTotalCarbohidratos).toFixed(2))}g</Text>
-                  <Text className="text-red-400 text-xs font-bold">Grasas: {parseFloat(Number(calcTotalGrasas).toFixed(2))}g</Text>
+                  <Text className="text-blue-400 text-xs font-bold">Proteína: {parseFloat(Number(totals.protein).toFixed(2))}g</Text>
+                  <Text className="text-yellow-400 text-xs font-bold">Carbohidratos: {parseFloat(Number(totals.carbohydrates).toFixed(2))}g</Text>
+                  <Text className="text-red-400 text-xs font-bold">Grasas: {parseFloat(Number(totals.fat).toFixed(2))}g</Text>
                 </View>
               </View>
 
               <Text className="text-neutral-400 font-bold mb-4 uppercase tracking-wider">Alimentos detectados</Text>
               
               {iaResult?.agrupados?.map((item, index) => {
-                const percentage = calcTotalGramos > 0 ? ((item.gramos_totales / calcTotalGramos) * 100).toFixed(1) : 0;
+                const percentage = totals.grams > 0 ? ((item.gramos_totales / totals.grams) * 100).toFixed(1) : 0;
                 return (
                   <View key={index} className="bg-neutral-900 p-4 rounded-xl mb-3 border border-neutral-700 z-10">
                     {editingIndex === index ? (
