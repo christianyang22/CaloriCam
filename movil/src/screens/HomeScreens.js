@@ -1,15 +1,16 @@
 import React, { useRef, useState, useEffect, useContext } from 'react';
 import { View, Text, TouchableOpacity, TextInput, Image, StyleSheet, ActivityIndicator, ScrollView, Keyboard, Animated, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context'; 
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useIsFocused } from '@react-navigation/native';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { UserContext } from '../context/UserContext';
 import { API_BASE_URL } from '../config/constants';
 import { calculateNutritionTotals } from '../utils/nutrition';
 
 export function HomeScreen({ navigation }) {
-  const { user, setUser } = useContext(UserContext); 
+  const { user, setUser } = useContext(UserContext);
   const [resumen, setResumen] = useState(null);
   const [semana, setSemana] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,8 +28,8 @@ export function HomeScreen({ navigation }) {
       Esto reduce la espera en la pantalla principal al no bloquear una peticion con la otra.
     */
     try {
-      const localDate = new Date().toLocaleDateString('en-CA'); 
-      
+      const localDate = new Date().toLocaleDateString('en-CA');
+
       const [resHoy, resSemana] = await Promise.all([
         fetch(`${API_BASE_URL}/resumen_hoy?fecha_local=${localDate}`, { headers: { 'Authorization': `Bearer ${user.token}`, 'ngrok-skip-browser-warning': 'true' } }),
         fetch(`${API_BASE_URL}/resumen_semanal?fecha_local=${localDate}`, { headers: { 'Authorization': `Bearer ${user.token}`, 'ngrok-skip-browser-warning': 'true' } })
@@ -53,14 +54,14 @@ export function HomeScreen({ navigation }) {
   };
 
   const porcentajeHoy = resumen ? Math.min((resumen.calorias_consumidas / resumen.meta_calorias) * 100, 100) : 0;
-  
+
   const meta = resumen?.meta_calorias || 2000;
-  
+
   /*
     Dividimos la meta calorica entre un decimal para que la linea objetivo quede al 75 por ciento de la altura.
     De esta forma queda espacio visual arriba por si el usuario se pasa de la meta.
   */
-  const chartMax = meta > 0 ? meta / 0.75 : 2000; 
+  const chartMax = meta > 0 ? meta / 0.75 : 2000;
 
   return (
     <SafeAreaView className="flex-1 bg-neutral-900 pt-10">
@@ -82,11 +83,11 @@ export function HomeScreen({ navigation }) {
               </View>
 
               <View className="h-4 bg-neutral-900 rounded-full w-full overflow-hidden mt-4 mb-6 border border-neutral-700">
-                <Animated.View 
+                <Animated.View
                   style={[
                     { height: '100%', borderRadius: 9999, width: `${porcentajeHoy}%` },
                     resumen?.calorias_consumidas > resumen?.meta_calorias ? { backgroundColor: '#ef4444' } : { backgroundColor: '#10b981' }
-                  ]} 
+                  ]}
                 />
               </View>
 
@@ -119,21 +120,21 @@ export function HomeScreen({ navigation }) {
                   Meta: {parseFloat(Number(meta).toFixed(2))} kcal
                 </Text>
               </View>
-              
+
               <View className="relative h-32 flex-row justify-between items-end">
-                  <View className="absolute w-full border-t border-dashed border-neutral-500 z-0" style={{ bottom: '75%' }} />
+                <View className="absolute w-full border-t border-dashed border-neutral-500 z-0" style={{ bottom: '75%' }} />
 
                 {semana.map((dia, idx) => {
                   const isOver = dia.calorias > meta;
                   const fillPercent = meta > 0 && dia.calorias > 0 ? Math.min((dia.calorias / chartMax) * 100, 100) : 0;
-                  
+
                   return (
                     <View key={`bar-${idx}`} className="w-8 h-full bg-neutral-900 rounded-lg justify-end overflow-hidden border border-neutral-700/50 z-10 mx-0.5">
-                      <View 
+                      <View
                         style={[
                           { width: '100%', borderRadius: 8, height: `${fillPercent}%`, minHeight: dia.calorias > 0 ? 4 : 0 },
                           isOver ? { backgroundColor: '#ef4444', shadowColor: '#ef4444', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 2 } : { backgroundColor: '#10b981' }
-                        ]} 
+                        ]}
                       />
                     </View>
                   );
@@ -165,20 +166,32 @@ export function HomeScreen({ navigation }) {
 export function CameraScreen({ navigation }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [flash, setFlash] = useState(false);
-  
-  // Estado para evitar el doble toque rapido y que no se sature la ram del movil.
   const [isTakingPhoto, setIsTakingPhoto] = useState(false);
+
   const cameraRef = useRef(null);
+  const isFocused = useIsFocused();
 
   if (!permission) return <View style={styles.container} />;
 
   if (!permission.granted) {
     return (
       <View style={styles.permissionContainer}>
-        <Ionicons name="camera-outline" size={64} color="#10b981" style={{ marginBottom: 24 }} />
-        <Text style={styles.permissionText}>Necesitamos acceso a la cámara para escanear tus alimentos.</Text>
-        <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-          <Text style={styles.permissionButtonText}>Permitir Cámara</Text>
+        <Ionicons
+          name="camera-outline"
+          size={64}
+          color="#10b981"
+          style={{ marginBottom: 24 }}
+        />
+        <Text style={styles.permissionText}>
+          Necesitamos acceso a la cámara para escanear tus alimentos.
+        </Text>
+        <TouchableOpacity
+          style={styles.permissionButton}
+          onPress={requestPermission}
+        >
+          <Text style={styles.permissionButtonText}>
+            Permitir Cámara
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -186,8 +199,8 @@ export function CameraScreen({ navigation }) {
 
   const takePicture = async () => {
     if (cameraRef.current && !isTakingPhoto) {
-      setIsTakingPhoto(true); 
-      
+      setIsTakingPhoto(true);
+
       try {
         /*
           Quitamos la codificacion en base64 para evitar errores de memoria.
@@ -197,46 +210,66 @@ export function CameraScreen({ navigation }) {
           Finalmente escalamos la imagen para que la ia reciba la textura con buena resolucion.
         */
         const photo = await cameraRef.current.takePictureAsync({ quality: 1, exif: true });
-        
+
         const orientacionCorregida = await manipulateAsync(photo.uri, [], { format: SaveFormat.JPEG });
-        
+
         const width = orientacionCorregida.width;
         const height = orientacionCorregida.height;
         const minDim = Math.min(width, height);
-        
+
         const cropSize = Math.floor(minDim * 0.8);
         let originX = Math.floor((width - cropSize) / 2);
         let originY = Math.floor((height - cropSize) / 2);
-        
+
         originX = Math.max(0, Math.min(originX, width - cropSize));
         originY = Math.max(0, Math.min(originY, height - cropSize));
-        
+
         const manipResult = await manipulateAsync(
           orientacionCorregida.uri,
           [{ crop: { originX, originY, width: cropSize, height: cropSize } }, { resize: { width: 800, height: 800 } }],
-          { compress: 0.9, format: SaveFormat.JPEG } 
+          { compress: 0.9, format: SaveFormat.JPEG }
         );
+
         navigation.replace('Results', { photoUri: manipResult.uri });
       } catch (error) {
         console.error("Error al procesar la imagen:", error);
         Alert.alert("Error", "No se pudo capturar la foto. Inténtalo de nuevo.");
-        setIsTakingPhoto(false); 
+        setIsTakingPhoto(false);
       }
     }
   };
 
   return (
     <View style={styles.container}>
-      <CameraView style={StyleSheet.absoluteFillObject} facing="back" enableTorch={flash} ref={cameraRef} selectedLens='builtInWideAngleCamera' zoom={0.07} ratio="4:3"/>
+      {isFocused && (
+        <CameraView
+          style={styles.camera}
+          facing="back"
+          enableTorch={flash}
+          ref={cameraRef}
+          selectedLens="builtInWideAngleCamera"
+          zoom={0}
+          ratio="4:3"
+          onCameraReady={() => {
+            console.log("CAMARA LISTA");
+          }}
+          onMountError={(error) => {
+            console.error("ERROR MONTANDO CAMARA:", error);
+          }}
+        />
+      )}
+
       <SafeAreaView style={styles.overlay}>
         <View style={styles.topBar}>
           <TouchableOpacity style={styles.iconButton} onPress={() => setFlash(!flash)}>
             <Ionicons name={flash ? "flash" : "flash-off"} size={28} color="white" />
           </TouchableOpacity>
+
           <TouchableOpacity style={styles.iconButton} onPress={() => navigation.goBack()}>
             <Ionicons name="close" size={28} color="white" />
           </TouchableOpacity>
         </View>
+
         <View style={styles.middleContainer}>
           <View style={styles.boundingBox}>
             <View style={[styles.corner, styles.topLeft]} />
@@ -245,10 +278,11 @@ export function CameraScreen({ navigation }) {
             <View style={[styles.corner, styles.bottomRight]} />
           </View>
         </View>
+
         <View style={styles.bottomBar}>
           <TouchableOpacity onPress={takePicture} disabled={isTakingPhoto} style={styles.captureButtonOuter}>
             {isTakingPhoto ? (
-              <ActivityIndicator color="#10b981" size="large" /> 
+              <ActivityIndicator color="#10b981" size="large" />
             ) : (
               <View style={styles.captureButtonInner} />
             )}
@@ -260,29 +294,147 @@ export function CameraScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  overlay: { flex: 1, justifyContent: 'space-between', backgroundColor: 'transparent' },
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 20 },
-  iconButton: { backgroundColor: 'rgba(0,0,0,0.5)', padding: 10, borderRadius: 50 },
-  middleContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  boundingBox: { width: '80%', aspectRatio: 1, borderWidth: 2, borderColor: 'rgba(255,255,255,0.2)', borderRadius: 24, position: 'relative' },
-  corner: { position: 'absolute', width: 40, height: 40, borderColor: '#10b981' },
-  topLeft: { top: 0, left: 0, borderTopWidth: 5, borderLeftWidth: 5, borderTopLeftRadius: 24 },
-  topRight: { top: 0, right: 0, borderTopWidth: 5, borderRightWidth: 5, borderTopRightRadius: 24 },
-  bottomLeft: { bottom: 0, left: 0, borderBottomWidth: 5, borderLeftWidth: 5, borderBottomLeftRadius: 24 },
-  bottomRight: { bottom: 0, right: 0, borderBottomWidth: 5, borderRightWidth: 5, borderBottomRightRadius: 24 },
-  bottomBar: { alignItems: 'center', paddingBottom: 40 },
-  captureButtonOuter: { width: 80, height: 80, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 40, borderWidth: 4, borderColor: '#10b981', justifyContent: 'center', alignItems: 'center' },
-  captureButtonInner: { width: 56, height: 56, backgroundColor: '#ffffff', borderRadius: 28 },
-  permissionContainer: { flex: 1, backgroundColor: '#171717', justifyContent: 'center', alignItems: 'center', padding: 32 },
-  permissionText: { color: 'white', textAlign: 'center', fontSize: 18, marginBottom: 32 },
-  permissionButton: { backgroundColor: '#10b981', paddingHorizontal: 32, paddingVertical: 16, borderRadius: 50 },
-  permissionButtonText: { color: 'white', fontWeight: 'bold', fontSize: 16 }
+  container: {
+    flex: 1,
+    backgroundColor: '#000'
+  },
+
+  camera: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0
+  },
+
+  overlay: {
+    flex: 1,
+    justifyContent: 'space-between',
+    backgroundColor: 'transparent'
+  },
+
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingTop: 20
+  },
+
+  iconButton: {
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 10,
+    borderRadius: 50
+  },
+
+  middleContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+
+  boundingBox: {
+    width: '80%',
+    aspectRatio: 1,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 24,
+    position: 'relative'
+  },
+
+  corner: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderColor: '#10b981'
+  },
+
+  topLeft: {
+    top: 0,
+    left: 0,
+    borderTopWidth: 5,
+    borderLeftWidth: 5,
+    borderTopLeftRadius: 24
+  },
+
+  topRight: {
+    top: 0,
+    right: 0,
+    borderTopWidth: 5,
+    borderRightWidth: 5,
+    borderTopRightRadius: 24
+  },
+
+  bottomLeft: {
+    bottom: 0,
+    left: 0,
+    borderBottomWidth: 5,
+    borderLeftWidth: 5,
+    borderBottomLeftRadius: 24
+  },
+
+  bottomRight: {
+    bottom: 0,
+    right: 0,
+    borderBottomWidth: 5,
+    borderRightWidth: 5,
+    borderBottomRightRadius: 24
+  },
+
+  bottomBar: {
+    alignItems: 'center',
+    paddingBottom: 40
+  },
+
+  captureButtonOuter: {
+    width: 80,
+    height: 80,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 40,
+    borderWidth: 4,
+    borderColor: '#10b981',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+
+  captureButtonInner: {
+    width: 56,
+    height: 56,
+    backgroundColor: '#ffffff',
+    borderRadius: 28
+  },
+
+  permissionContainer: {
+    flex: 1,
+    backgroundColor: '#171717',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32
+  },
+
+  permissionText: {
+    color: 'white',
+    textAlign: 'center',
+    fontSize: 18,
+    marginBottom: 32
+  },
+
+  permissionButton: {
+    backgroundColor: '#10b981',
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 50
+  },
+
+  permissionButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16
+  }
 });
 
 export function ResultsScreen({ route, navigation }) {
   const { photoUri } = route.params || {};
-  const { user, setUser } = useContext(UserContext); 
+  const { user, setUser } = useContext(UserContext);
   const [loading, setLoading] = useState(true);
   const [iaResult, setIaResult] = useState(null);
 
@@ -306,18 +458,20 @@ export function ResultsScreen({ route, navigation }) {
       */
       const formData = new FormData();
       formData.append('imagen', { uri: photoUri, name: 'plato.jpg', type: 'image/jpeg' });
-      
+
       const response = await fetch(`${API_BASE_URL}/analizar_plato`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${user.token}`, 'ngrok-skip-browser-warning': 'true' },
         body: formData,
       });
+
       if (response.status === 401) {
         setUser(null);
         return;
       }
+
       const data = await response.json();
-      
+
       if (data.agrupados) {
         data.agrupados.forEach(item => {
           if (item.gramos_totales > 5000) {
@@ -332,11 +486,11 @@ export function ResultsScreen({ route, navigation }) {
         });
       }
 
-      setIaResult(data); 
+      setIaResult(data);
     } catch (error) {
       setIaResult({ error: "Error de red: FastAPI no responde." });
     } finally {
-      setLoading(false); 
+      setLoading(false);
     }
   };
 
@@ -357,7 +511,7 @@ export function ResultsScreen({ route, navigation }) {
       // Forzamos la zona horaria local en la fecha para evitar desfases de horas al guardar en la base de datos.
       const now = new Date();
       const pad = (n) => String(n).padStart(2, '0');
-      const fechaLocalStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+      const fechaLocalStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
       const response = await fetch(`${API_BASE_URL}/guardar_plato`, {
         method: 'POST',
@@ -372,8 +526,10 @@ export function ResultsScreen({ route, navigation }) {
           fecha_local: fechaLocalStr
         })
       });
+
       if (!response.ok) throw new Error('No se pudo guardar el plato');
-      navigation.popToTop(); 
+      navigation.popToTop();
+
     } catch (e) {
       console.error("Error al guardar plato:", e);
     }
@@ -394,7 +550,7 @@ export function ResultsScreen({ route, navigation }) {
 
     const newName = finalName || searchQuery || oldName;
     const ratio = newGrams / oldGrams;
-    
+
     const updated = {
       ...iaResult,
       agrupados: iaResult.agrupados.map((currentItem, currentIndex) => (
@@ -403,8 +559,9 @@ export function ResultsScreen({ route, navigation }) {
           : currentItem
       )),
     };
+
     const updatedItem = updated.agrupados[index];
-    
+
     updatedItem.ingrediente = newName;
     updatedItem.gramos_totales = parseFloat(Number(newGrams).toFixed(2));
     updatedItem.calorias_totales = parseFloat(Number(updatedItem.calorias_totales * ratio).toFixed(2));
@@ -423,18 +580,26 @@ export function ResultsScreen({ route, navigation }) {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${user.token}`, 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
         body: JSON.stringify({
-          imagen_id: updated.imagen_id || "sin-id", etiqueta_ia: oldName, etiqueta_usuario: newName,
-          gramos_ia: oldGrams, gramos_usuario: newGrams, coordenadas_cajas: cajasAsociadas
+          imagen_id: updated.imagen_id || "sin-id",
+          etiqueta_ia: oldName,
+          etiqueta_usuario: newName,
+          gramos_ia: oldGrams,
+          gramos_usuario: newGrams,
+          coordenadas_cajas: cajasAsociadas
         })
       });
-      if (res.status === 401) { setUser(null); }
+
+      if (res.status === 401) {
+        setUser(null);
+      }
+
     } catch (e) {
       console.error("Error al enviar corrección:", e);
     }
   };
 
-  const filteredClasses = searchQuery.trim() === "" 
-    ? [] 
+  const filteredClasses = searchQuery.trim() === ""
+    ? []
     : clasesDisponibles.filter(c => c.toLowerCase().includes(searchQuery.toLowerCase()) && c.toLowerCase() !== searchQuery.toLowerCase()).slice(0, 5);
 
   const totals = calculateNutritionTotals(iaResult?.agrupados);
@@ -447,6 +612,7 @@ export function ResultsScreen({ route, navigation }) {
 
       <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {photoUri && <Image source={{ uri: photoUri }} style={{ width: '100%', height: 250, borderRadius: 16, marginBottom: 20 }} resizeMode="cover" />}
+
         <View className="w-full bg-neutral-800 p-6 rounded-2xl border border-neutral-700 min-h-[120px] justify-center mb-6">
           {loading ? (
             <View className="items-center py-4">
@@ -469,6 +635,7 @@ export function ResultsScreen({ route, navigation }) {
                     <Text className="text-emerald-400 font-bold text-lg">{parseFloat(Number(totals.calories).toFixed(2))} kcal</Text>
                   </View>
                 </View>
+
                 <View className="flex-row justify-between pt-3 border-t border-neutral-700/50">
                   <Text className="text-blue-400 text-xs font-bold">Proteína: {parseFloat(Number(totals.protein).toFixed(2))}g</Text>
                   <Text className="text-yellow-400 text-xs font-bold">Carbohidratos: {parseFloat(Number(totals.carbohydrates).toFixed(2))}g</Text>
@@ -477,33 +644,66 @@ export function ResultsScreen({ route, navigation }) {
               </View>
 
               <Text className="text-neutral-400 font-bold mb-4 uppercase tracking-wider">Alimentos detectados</Text>
-              
+
               {iaResult?.agrupados?.map((item, index) => {
                 const percentage = totals.grams > 0 ? ((item.gramos_totales / totals.grams) * 100).toFixed(1) : 0;
+
                 return (
                   <View key={index} className="bg-neutral-900 p-4 rounded-xl mb-3 border border-neutral-700 z-10">
                     {editingIndex === index ? (
                       <View className="mb-2">
                         <Text className="text-emerald-500 text-xs font-bold uppercase mb-2">Busca el alimento correcto:</Text>
-                        <TextInput value={searchQuery} onChangeText={setSearchQuery} className="bg-neutral-800 border border-emerald-500 text-white px-3 py-2 rounded-lg w-full mb-1" placeholder="Escribe (ej: po)..." placeholderTextColor="#9ca3af" />
+
+                        <TextInput
+                          value={searchQuery}
+                          onChangeText={setSearchQuery}
+                          className="bg-neutral-800 border border-emerald-500 text-white px-3 py-2 rounded-lg w-full mb-1"
+                          placeholder="Escribe (ej: po)..."
+                          placeholderTextColor="#9ca3af"
+                        />
+
                         {filteredClasses.length > 0 && (
                           <View className="bg-neutral-800 border border-neutral-700 rounded-lg mb-3 overflow-hidden">
                             {filteredClasses.map((cls, cIdx) => (
-                              <TouchableOpacity key={cIdx} className="p-2.5 border-b border-neutral-700/50 active:bg-emerald-600/20" onPress={() => { setSearchQuery(cls); Keyboard.dismiss(); }}>
+                              <TouchableOpacity
+                                key={cIdx}
+                                className="p-2.5 border-b border-neutral-700/50 active:bg-emerald-600/20"
+                                onPress={() => {
+                                  setSearchQuery(cls);
+                                  Keyboard.dismiss();
+                                }}
+                              >
                                 <Text className="text-white capitalize font-medium">{cls}</Text>
                               </TouchableOpacity>
                             ))}
                           </View>
                         )}
+
                         <Text className="text-neutral-400 text-xs font-bold uppercase mb-1 mt-2">Peso en gramos:</Text>
+
                         <View className="flex-row items-center justify-between">
                           <View className="flex-row items-center">
-                            <TextInput value={editGrams} onChangeText={setEditGrams} keyboardType="numeric" maxLength={4} className="bg-neutral-800 border border-emerald-500 text-white px-3 py-2 rounded-lg w-20 text-center" />
+                            <TextInput
+                              value={editGrams}
+                              onChangeText={setEditGrams}
+                              keyboardType="numeric"
+                              maxLength={4}
+                              className="bg-neutral-800 border border-emerald-500 text-white px-3 py-2 rounded-lg w-20 text-center"
+                            />
                             <Text className="text-neutral-400 ml-2 font-bold">g</Text>
                           </View>
+
                           <View className="flex-row items-center">
-                            <TouchableOpacity onPress={() => setEditingIndex(null)} className="mr-4"><Text className="text-neutral-400 font-bold">Cancelar</Text></TouchableOpacity>
-                            <TouchableOpacity onPress={() => guardarCorreccion(index, searchQuery)} className="bg-emerald-600 px-4 py-2 rounded-lg"><Text className="text-white font-bold">Guardar</Text></TouchableOpacity>
+                            <TouchableOpacity onPress={() => setEditingIndex(null)} className="mr-4">
+                              <Text className="text-neutral-400 font-bold">Cancelar</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                              onPress={() => guardarCorreccion(index, searchQuery)}
+                              className="bg-emerald-600 px-4 py-2 rounded-lg"
+                            >
+                              <Text className="text-white font-bold">Guardar</Text>
+                            </TouchableOpacity>
                           </View>
                         </View>
                       </View>
@@ -511,28 +711,57 @@ export function ResultsScreen({ route, navigation }) {
                       <View>
                         <View className="flex-row justify-between items-start mb-2">
                           <View className="flex-row items-center flex-1 pr-2">
-                            <Text className="text-white font-bold text-lg capitalize mr-2" numberOfLines={1}>{item.ingrediente}</Text>
-                            <Text className="text-neutral-500 text-xs font-bold mr-2">({percentage}%)</Text>
-                            <TouchableOpacity onPress={() => { setEditingIndex(index); setSearchQuery(item.ingrediente); setEditGrams(String(item.gramos_totales)); }} className="bg-neutral-800 p-1.5 rounded-full border border-neutral-700">
+                            <Text className="text-white font-bold text-lg capitalize mr-2" numberOfLines={1}>
+                              {item.ingrediente}
+                            </Text>
+
+                            <Text className="text-neutral-500 text-xs font-bold mr-2">
+                              ({percentage}%)
+                            </Text>
+
+                            <TouchableOpacity
+                              onPress={() => {
+                                setEditingIndex(index);
+                                setSearchQuery(item.ingrediente);
+                                setEditGrams(String(item.gramos_totales));
+                              }}
+                              className="bg-neutral-800 p-1.5 rounded-full border border-neutral-700"
+                            >
                               <Ionicons name="pencil" size={14} color="#10b981" />
                             </TouchableOpacity>
                           </View>
-                          <Text className="text-emerald-400 font-bold text-lg">{parseFloat(Number(item.calorias_totales).toFixed(2))} kcal</Text>
+
+                          <Text className="text-emerald-400 font-bold text-lg">
+                            {parseFloat(Number(item.calorias_totales).toFixed(2))} kcal
+                          </Text>
                         </View>
-                        <Text className="text-neutral-400 mb-2">{parseFloat(Number(item.gramos_totales).toFixed(2))} gramos</Text>
+
+                        <Text className="text-neutral-400 mb-2">
+                          {parseFloat(Number(item.gramos_totales).toFixed(2))} gramos
+                        </Text>
+
                         <View className="flex-row justify-between mt-2 pt-2 border-t border-neutral-800">
-                          <Text className="text-blue-400 text-xs">Proteína: {parseFloat(Number(item.macronutrientes.proteinas_g).toFixed(2))}g</Text>
-                          <Text className="text-yellow-400 text-xs">Carbohidratos: {parseFloat(Number(item.macronutrientes.carbohidratos_g).toFixed(2))}g</Text>
-                          <Text className="text-red-400 text-xs">Grasas: {parseFloat(Number(item.macronutrientes.grasas_g).toFixed(2))}g</Text>
+                          <Text className="text-blue-400 text-xs">
+                            Proteína: {parseFloat(Number(item.macronutrientes.proteinas_g).toFixed(2))}g
+                          </Text>
+
+                          <Text className="text-yellow-400 text-xs">
+                            Carbohidratos: {parseFloat(Number(item.macronutrientes.carbohidratos_g).toFixed(2))}g
+                          </Text>
+
+                          <Text className="text-red-400 text-xs">
+                            Grasas: {parseFloat(Number(item.macronutrientes.grasas_g).toFixed(2))}g
+                          </Text>
                         </View>
                       </View>
                     )}
                   </View>
                 );
               })}
-              
+
               <View className="mt-6 flex-row items-start bg-neutral-900/50 p-3 rounded-lg border border-neutral-700/50 mb-2">
                 <Ionicons name="information-circle-outline" size={20} color="#9ca3af" style={{ marginTop: 2, marginRight: 8 }} />
+
                 <Text className="text-neutral-400 text-xs flex-1 leading-4">
                   Estimación realizada mediante inteligencia artificial. El alimento, la cantidad y los valores nutricionales detectados pueden contener errores. Verifica la información antes de utilizarla.
                 </Text>
@@ -545,11 +774,19 @@ export function ResultsScreen({ route, navigation }) {
 
       {!loading && !iaResult?.error && (
         <View className="px-6 pb-6 pt-2 bg-neutral-900 flex-row space-x-3">
-          <TouchableOpacity className="flex-1 bg-red-500/10 border border-red-500/50 p-4 rounded-xl items-center" onPress={() => navigation.popToTop()}>
+          <TouchableOpacity
+            className="flex-1 bg-red-500/10 border border-red-500/50 p-4 rounded-xl items-center"
+            onPress={() => navigation.popToTop()}
+          >
             <Text className="text-red-500 font-bold text-base">Descartar</Text>
           </TouchableOpacity>
+
           <View className="w-3" />
-          <TouchableOpacity className="flex-1 bg-emerald-600 p-4 rounded-xl items-center" onPress={handleGuardarPlato}>
+
+          <TouchableOpacity
+            className="flex-1 bg-emerald-600 p-4 rounded-xl items-center"
+            onPress={handleGuardarPlato}
+          >
             <Text className="text-white font-bold text-base">Guardar Plato</Text>
           </TouchableOpacity>
         </View>
